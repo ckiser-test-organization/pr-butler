@@ -1,4 +1,4 @@
-name: Notify Slack on PR Opened
+name: Notify Slack for Team PRs
 
 on:
   pull_request:
@@ -8,7 +8,30 @@ jobs:
   notify-slack:
     runs-on: ubuntu-latest
     steps:
+      - name: Check team membership
+        id: check_team
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORG: ckiser-test-organization
+          TEAM_SLUG: pr-notify-team
+          USERNAME: ${{ github.event.pull_request.user.login }}
+        run: |
+          RESPONSE=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/orgs/$ORG/teams/$TEAM_SLUG/memberships/$USERNAME")
+
+          echo "API response: $RESPONSE"
+
+          STATE=$(echo "$RESPONSE" | jq -r '.state')
+
+          if [ "$STATE" = "active" ]; then
+            echo "is_member=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_member=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Send message to Slack
+        if: steps.check_team.outputs.is_member == 'true'
         run: |
           PR_TITLE="${{ github.event.pull_request.title }}"
           PR_URL="${{ github.event.pull_request.html_url }}"
